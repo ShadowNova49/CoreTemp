@@ -1,14 +1,16 @@
 import telebot
 import wmi
-import pythoncom
 import threading
 import time
 import schedule
-import logging
 import platform
 import subprocess
 import os
 import sys
+#import pythoncom
+
+import logging.config
+import datetime
 from telebot.types import Message
 from telebot import types
 
@@ -16,20 +18,23 @@ with open(os.path.dirname(os.path.realpath(__file__)) + '/API_token.txt') as fil
     TOKEN = file.readline().strip()
 
 bot = telebot.TeleBot(TOKEN)
-logging.basicConfig(level=logging.INFO)
+
+# logging
+logging.basicConfig(filename=os.path.dirname(os.path.realpath(__file__)) + '/log/{}('.format(os.path.splitext(os.path.basename(__file__))[0])+datetime.date.today().isoformat()+').log',
+                    level=logging.DEBUG,
+                    format='%(asctime)s - %(filename)s[LINE:%(lineno)d] - %(levelname)s - %(message)s')
 
 def get_temp():
-    pythoncom.CoInitialize()
+    #pythoncom.CoInitialize()
     w = wmi.WMI(namespace="root\OpenHardwareMonitor")
     sensors = w.Sensor()
-    pythoncom.CoUninitialize()
+    #pythoncom.CoUninitialize()
     return sensors
 
 def check_temp():
     sensors = get_temp()
     for sensor in sensors:
-        if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Core #1") != -1 and str(sensor.Name).find(
-                "CPU Core #10") == -1:
+        if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Package") != -1:
             outputStr = ''
             if sensor.Value >= 40:
                 outputStr = 'Sensor: ' + str(
@@ -84,7 +89,7 @@ def ping(host):
 
 def buttonsInit():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    item1 = types.KeyboardButton("Температура Server-10")
+    item1 = types.KeyboardButton("Температура")
     item2 = types.KeyboardButton("Ping Server-77 File")
     item3 = types.KeyboardButton("Ping Server-1 Buh")
     item4 = types.KeyboardButton("Ping Server-2 Adonis")
@@ -113,44 +118,44 @@ def start(message: Message):
 # Получение сообщений от юзера
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
-    if message.text.strip() == 'Температура Server-10':
+    if message.text.strip() == 'Температура':
         sensors = get_temp()
         for sensor in sensors:
-            if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Core #1") != -1 and str(
-                    sensor.Name).find("CPU Core #10") == -1:
+            if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Package") != -1:
                 bot.send_message(message.chat.id, 'Sensor: ' + str(sensor.Identifier) +
                                  '\nCore ' + str(sensor.Name) + '\nValue: ' +
                                  str(sensor.Value) + '\nMax: ' + str(sensor.Max))
 
     elif message.text.strip() == 'Ping Server-77 File':
-        if ping('192.168.55.77'):
+        if ping('192.168.1.1'):
             bot.send_message(message.chat.id, 'Ping Server-77 File ended successful!')
 
     elif message.text.strip() == 'Ping Server-1 Buh':
-        if ping('192.168.55.1'):
+        if ping('192.168.1.2'):
             bot.send_message(message.chat.id, 'Ping Server-1 Buh ended successful!')
 
     elif message.text.strip() == 'Ping Server-2 Adonis':
-        if ping('192.168.55.2'):
+        if ping('192.168.1.3'):
             bot.send_message(message.chat.id, 'Ping Server-2 Adonis ended successful!')
 
     elif message.text.strip() == 'Ping Server-3 Old DNS':
-        if ping('192.168.55.3'):
+        if ping('192.168.1.4'):
             bot.send_message(message.chat.id, 'Ping Server-3 Old DNS ended successful!')
 
     elif message.text.strip() == 'Ping Server-7 Clinic':
-        if ping('192.168.55.7'):
+        if ping('192.168.1.5'):
             bot.send_message(message.chat.id, 'Ping Server-7 Clinic ended successful!')
 
     elif message.text.strip() == 'Ping ter-admin1':
-        if ping('192.168.55.135'):
+        if ping('192.168.1.6'):
             bot.send_message(message.chat.id, 'Ping ter-admin1 ended successful!')
 
     elif message.text.strip() == 'Ping Server-10 DNS':
-        if ping('192.168.54.200'):
+        if ping('192.168.1.7'):
             bot.send_message(message.chat.id, 'Ping Server-10 DNS ended successful!')
 
 if __name__ == '__main__':
+    logging.info('start programm')
     t1 = threading.Thread(target=runBot)
     t2 = threading.Thread(target=runSchedulers)
     # starting thread 1
