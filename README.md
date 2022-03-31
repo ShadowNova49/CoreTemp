@@ -1,2 +1,2 @@
 # CoreTemp
-Python Telegram Bot to conrol the CPU temperature. Works with wmi library using Open Hardware Monitor free softwear and availability of important network nods
+Python Telegram Bot to conrol the CPU temperature and availability of important network nods. Works with wmi library using Open Hardware Monitor free softwear.
