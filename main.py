@@ -1,41 +1,115 @@
-import telebot
-import wmi
-import threading
-import time
-import schedule
+import datetime
+import logging.config
+import os
 import platform
 import subprocess
-import os
 import sys
-#import pythoncom
-
-import logging.config
-import datetime
-from telebot.types import Message
+import threading
+import time
+import pythoncom
+import schedule
+import telebot
+import wmi
 from telebot import types
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 with open(os.path.dirname(os.path.realpath(__file__)) + '/API_token.txt') as file:
-    TOKEN = file.readline().strip()
+    token = file.readline().strip()
 
-bot = telebot.TeleBot(TOKEN)
+#bot = telebot.TeleBot(token)
 
 # logging
 logging.basicConfig(filename=os.path.dirname(os.path.realpath(__file__)) + '/log/{}('.format(os.path.splitext(os.path.basename(__file__))[0])+datetime.date.today().isoformat()+').log',
                     level=logging.DEBUG,
                     format='%(asctime)s - %(filename)s[LINE:%(lineno)d] - %(levelname)s - %(message)s')
 
-def get_temp():
-    #pythoncom.CoInitialize()
-    w = wmi.WMI(namespace="root\OpenHardwareMonitor")
-    sensors = w.Sensor()
-    #pythoncom.CoUninitialize()
-    return sensors
+class CoreTempBot:
 
-def check_temp():
+    def __init__(self):
+        """Start the bot."""
+
+        # Create the EventHandler and pass it your bot's token.
+        updater = Updater(token)
+
+        # Get the dispatcher to register handlers
+        dp = updater.dispatcher
+
+        # on different commands - answer in Telegram
+
+        # on noncommand i.e message - echo the message on Telegram
+
+        dp.add_handler(CommandHandler("start", self.start))
+        dp.add_handler(CommandHandler("tmp", self.tmp))
+        dp.add_handler(MessageHandler(Filters.text, self.handle_message))
+        dp.add_error_handler(self.error)
+
+        # Start the Bot
+        updater.start_polling()
+
+
+
+        logging.info('start programm')
+        print("Bot started")
+
+        # Run the bot until you press Ctrl-C or the process receives SIGINT,
+        # SIGTERM or SIGABRT. This should be used most of the time, since
+        # start_polling() is non-blocking and will stop the bot gracefully.
+        updater.idle()
+
+    def start(self, update, context):
+        update.message.reply_text('Start checking ...')
+        chat_id = update.message.chat_id
+        #self.handlers.pop(chat_id, None)
+        markup = buttonsInit()
+        context.bot.send_message(chat_id=chat_id, text='Выберите задание:', reply_markup=markup)
+
+    def error(self, update, context, error):
+        """Log Errors caused by Updates."""
+        print("Update '{}' caused error '{}'".format(update, error),
+              file=sys.stderr)
+
+    def tmp(self, update, context):
+        chat_id = update.message.chat_id
+        bot = context.bot
+
+        sensors = get_temp()
+        for sensor in sensors:
+            if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Package") != -1:
+                bot.send_message(chat_id=chat_id, text='Sensor: ' + str(sensor.Identifier) +
+                                                       '\nCore ' + str(sensor.Name) + '\nValue: ' +
+                                                       str(sensor.Value) + '\nMax: ' + str(sensor.Max))
+
+    def handle_message(self, update, context):
+        chat_id = update.message.chat_id
+        text = update.message.text
+        bot = context.bot
+
+        if text.find("ping") != -1:
+            for substr in text.split():
+                if str(substr).find('.'):
+                    if ping(str(substr)):
+                        bot.send_message(chat_id=chat_id, text='Ping ' + str(substr) + ' ended successful!')
+        else:
+            bot.send_message(chat_id=chat_id, text="кажется вы где-то ошиблись... попробуйте еще раз")
+
+    def send_scheduled_event(self, update, context):
+        logging.info('enter send_scheduled_event func')
+        result = check_temp_event()
+        print(result)
+        context.bot.send_message(chat_id=update.message.chat_id, text=result)
+
+    def runSchedulers(self):
+        schedule.every(1).minutes.do(self.send_scheduled_event)
+        logging.info('scheduler enter')
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
+def check_temp_event():
+    outputStr = ''
     sensors = get_temp()
     for sensor in sensors:
         if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Package") != -1:
-            outputStr = ''
             if sensor.Value >= 40:
                 outputStr = 'Sensor: ' + str(
                     sensor.Identifier) + '\n' + 'ВНИМАНИЕ! ТЕМПЕРАТУРА ПОДНЯЛАСЬ ДО ' + str(
@@ -47,36 +121,14 @@ def check_temp():
                 outputStr = 'Sensor: ' + str(sensor.Identifier) + '\n' + str(sensor.Value) + '! ПОМИНКИ.'
             # elif sensor.Value <= 25:
             # outputStr = 'Sensor: ' + str(sensor.Identifier) + '\n' + str(sensor.Value)  +  '. На чииииле. На расслабоооооне!'
-            with open('chat_id.txt', 'r', encoding='UTF-8') as f:
-                for id in f:
-                    bot.send_message(id, outputStr)
+    return outputStr
 
-def runBot():
-    while True:
-        try:
-            bot.polling(none_stop=True)
-        except:
-            logging.error('error: {}'.format(sys.exc_info()[0]))
-            time.sleep(5)
-
-def runSchedulers():
-    schedule.every(10).minutes.do(check_temp)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-def checkUser(chat_id: str):
-    check = bool(False)
-    with open('chat_id.txt', 'r', encoding='UTF-8') as f:
-        for id in f:
-            if int(id) == int(chat_id):
-                check = bool(True)
-                break
-    with open('chat_id.txt', 'a', encoding='UTF-8') as f:
-        if check == False:
-            chat_id = chat_id + '\n'
-            f.write(chat_id)
+def get_temp():
+    pythoncom.CoInitialize()
+    w = wmi.WMI(namespace="root\OpenHardwareMonitor")
+    sensors = w.Sensor()
+    pythoncom.CoUninitialize()
+    return sensors
 
 def ping(host):
     parameter = '-n' if platform.system().lower() == 'windows' else '-c'
@@ -90,75 +142,11 @@ def ping(host):
 def buttonsInit():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     item1 = types.KeyboardButton("Температура")
-    item2 = types.KeyboardButton("Ping Server-77 File")
-    item3 = types.KeyboardButton("Ping Server-1 Buh")
-    item4 = types.KeyboardButton("Ping Server-2 Adonis")
-    item5 = types.KeyboardButton("Ping Server-3 Old DNS")
-    item6 = types.KeyboardButton("Ping Server-7 Clinic")
-    item7 = types.KeyboardButton("Ping ter-admin1")
-    item8 = types.KeyboardButton("Ping Server-10 DNS")
     markup.add(item1)
-    markup.add(item2)
-    markup.add(item3)
-    markup.add(item4)
-    markup.add(item5)
-    markup.add(item6)
-    markup.add(item7)
-    markup.add(item8)
     return markup
 
-@bot.message_handler(commands=["start"])
-def start(message: Message):
-    checkUser(str(message.chat.id))
-    bot.reply_to(message, "Start checking ...")
-    markup = buttonsInit()
-    bot.send_message(message.chat.id, 'Выберите задание:',
-                     reply_markup=markup)
-
-# Получение сообщений от юзера
-@bot.message_handler(content_types=["text"])
-def handle_text(message):
-    if message.text.strip() == 'Температура':
-        sensors = get_temp()
-        for sensor in sensors:
-            if sensor.SensorType == u'Temperature' and str(sensor.Name).find("CPU Package") != -1:
-                bot.send_message(message.chat.id, 'Sensor: ' + str(sensor.Identifier) +
-                                 '\nCore ' + str(sensor.Name) + '\nValue: ' +
-                                 str(sensor.Value) + '\nMax: ' + str(sensor.Max))
-
-    elif message.text.strip() == 'Ping Server-77 File':
-        if ping('192.168.1.1'):
-            bot.send_message(message.chat.id, 'Ping Server-77 File ended successful!')
-
-    elif message.text.strip() == 'Ping Server-1 Buh':
-        if ping('192.168.1.2'):
-            bot.send_message(message.chat.id, 'Ping Server-1 Buh ended successful!')
-
-    elif message.text.strip() == 'Ping Server-2 Adonis':
-        if ping('192.168.1.3'):
-            bot.send_message(message.chat.id, 'Ping Server-2 Adonis ended successful!')
-
-    elif message.text.strip() == 'Ping Server-3 Old DNS':
-        if ping('192.168.1.4'):
-            bot.send_message(message.chat.id, 'Ping Server-3 Old DNS ended successful!')
-
-    elif message.text.strip() == 'Ping Server-7 Clinic':
-        if ping('192.168.1.5'):
-            bot.send_message(message.chat.id, 'Ping Server-7 Clinic ended successful!')
-
-    elif message.text.strip() == 'Ping ter-admin1':
-        if ping('192.168.1.6'):
-            bot.send_message(message.chat.id, 'Ping ter-admin1 ended successful!')
-
-    elif message.text.strip() == 'Ping Server-10 DNS':
-        if ping('192.168.1.7'):
-            bot.send_message(message.chat.id, 'Ping Server-10 DNS ended successful!')
 
 if __name__ == '__main__':
-    logging.info('start programm')
-    t1 = threading.Thread(target=runBot)
-    t2 = threading.Thread(target=runSchedulers)
-    # starting thread 1
-    t1.start()
-    # starting thread 2
-    t2.start()
+    coretemp_bot = CoreTempBot()
+    t1 = threading.Thread(target=coretemp_bot.start) #t1.start()   # starting thread 1
+    t2 = threading.Thread(target=coretemp_bot.runSchedulers())  # t2.start()  # starting thread 2

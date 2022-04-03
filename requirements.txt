@@ -7,3 +7,6 @@ urllib3==1.26.9
 WMI==1.5.1
 PyTelegramBotAPI
 schedule == 1.1.0
+python-telegram-bot
+
+telegram~=0.0.1
